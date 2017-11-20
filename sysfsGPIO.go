@@ -2,108 +2,133 @@ package main
 
 import (
 	"fmt"
-	//   "bufio"
-	//   "io"
 	"io/ioutil"
 	"os"
 	"strconv"
-	//"sync"
 	"syscall"
 	"time"
 )
 
 // A single RPi GPIO pin
-type ioPin struct {
+type IOPin struct {
 	// The GPIO number (important)
-	gpioNum int
-	// The number of the pin on the header (unimportant and here for
-	// convenience)
-	headerNum int
+	GPIONum int
 	// Input or output
 	// Valid values are strings "in" or "out"
-	direction string
+	Direction string
 	// Edge to trigger on
 	// Valid values are "rising" or "falling"
-	triggerEdge string
+	TriggerEdge string
 	// Sysfs file
-	sysfsFile *os.File
+	SysfsFile *os.File
 }
 
+// TODO: Create a function to set the trigger edge as rising or falling
+
 // Initialize a GPIO pin
-func (pin *ioPin) init() {
+func InitPin(gpioNum int, direction string) (*IOPin, error){
+	pin := IOPin {
+		GPIONum: gpioNum,
+		Direction: direction,
+		TriggerEdge: "rising",
+	}
 	// Check to see whether the pin has already been exported
-	exportedCheckPath := "/sys/class/gpio/gpio" + strconv.Itoa(pin.gpioNum)
+	exportedCheckPath := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum)
 	_, err := os.Stat(exportedCheckPath)
 
 	// If the file corresponding to the exported pin does not exist, create it
 	if os.IsNotExist(err) {
 		// Convert the pin number to something that can be written by the
 		// ioutil file writer to sysfs format
-		sysfsPinNumber := []byte(strconv.Itoa(pin.gpioNum))
+		sysfsPinNumber := []byte(strconv.Itoa(pin.GPIONum))
 		// Export the pin
 		err := ioutil.WriteFile("/sys/class/gpio/export", sysfsPinNumber, os.ModeDevice|os.ModeCharDevice)
-		fileCheck(err, true)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Set the direction: "in" (input) or "out" (output)
-	directionFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.gpioNum) + "/direction"
-	sysfsPinDirection := []byte(pin.direction)
+	directionFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/direction"
+	sysfsPinDirection := []byte(pin.Direction)
 	err = ioutil.WriteFile(directionFileName, sysfsPinDirection, os.ModeDevice|os.ModeCharDevice)
-	fileCheck(err)
+	if err != nil {
+		return nil, err
+	}
 
 	// Set the interrupt edge if applicable: "rising" or "falling" or "none"
-	if pin.direction == "in" && len(pin.triggerEdge) != 0 {
-		edgeFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.gpioNum) + "/edge"
-		sysfs_pin_edge := []byte(pin.triggerEdge)
+	if pin.Direction == "in" && len(pin.TriggerEdge) != 0 {
+		edgeFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/edge"
+		sysfs_pin_edge := []byte(pin.TriggerEdge)
 		err = ioutil.WriteFile(edgeFileName, sysfs_pin_edge, os.ModeDevice|os.ModeCharDevice)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Open and leave open the device file for reading or writing digital data
-	value_file_name := "/sys/class/gpio/gpio" + strconv.Itoa(pin.gpioNum) + "/value"
-	if pin.direction == "out" {
-		pin.sysfsFile, err = os.OpenFile(value_file_name, os.O_RDWR, 0660)
+	valueFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/value"
+	if pin.Direction == "out" {
+		pin.SysfsFile, err = os.OpenFile(valueFileName, os.O_RDWR, 0660)
 	} else {
-		pin.sysfsFile, err = os.OpenFile(value_file_name, os.O_RDONLY, 0660)
+		pin.SysfsFile, err = os.OpenFile(valueFileName, os.O_RDONLY, 0660)
 	}
-	fileCheck(err)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pin, nil
 }
 
 // Release the GPIO pin and close sysfs files
-func (pin *ioPin) release() {
+func (pin *IOPin) ReleasePin() error {
 	// Close the device file
-	err := pin.sysfsFile.Close()
-	fileCheck(err, true, "Error closing")
+	err := pin.SysfsFile.Close()
+	if err != nil {
+		return err
+	}
 
 	// Un-export the pin in Sysfs
 
 	// Convert the pin number to something that can be written by ioutil
 	// file writer to sysfs
-	sysfsPinNumber := []byte(strconv.Itoa(pin.gpioNum))
+	sysfsPinNumber := []byte(strconv.Itoa(pin.GPIONum))
 	// Unxport the pin
 	err = ioutil.WriteFile("/sys/class/gpio/unexport", sysfsPinNumber, os.ModeDevice|os.ModeCharDevice)
-	fileCheck(err, true, "Error unexporting")
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Set an output GPIO pin high
-func (pin *ioPin) set_high() {
-	_, err := pin.sysfsFile.Write([]byte("1"))
-	fileCheck(err, true, "Error writing pin high")
+func (pin *IOPin) SetHigh() error {
+	_, err := pin.SysfsFile.Write([]byte("1"))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Set an output GPIO pin low
-func (pin *ioPin) set_low() {
-	_, err := pin.sysfsFile.Write([]byte("0"))
-	fileCheck(err, true, "Error writing pin low")
+func (pin *IOPin) SetLow() error {
+	_, err := pin.SysfsFile.Write([]byte("0"))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Read an input GPIO pin and return a byte slice
-func (pin *ioPin) read() []byte {
+func (pin *IOPin) Read() ([]byte, error) {
 	readBuffer := make([]byte, 16)
 	// Must rewind for every read
-	pin.sysfsFile.Seek(0, 0)
-	_, err := pin.sysfsFile.Read(readBuffer)
-	fileCheck(err, true, "Error reading pin")
-	return readBuffer
+	pin.SysfsFile.Seek(0, 0)
+	_, err := pin.SysfsFile.Read(readBuffer)
+	if err != nil {
+		return nil, err
+	}
+	return readBuffer, nil
 }
 
 // Keeping all the epoll data global as epoll should be created only once per process
@@ -115,9 +140,9 @@ var epollData struct {
 	events [MaxPollEvents]syscall.EpollEvent
 }
 
-func (pin *ioPin) addInterruptPin() {
+func (pin *IOPin) AddInterruptPin() error {
 
-	fd_gpio := pin.sysfsFile
+	fd_gpio := pin.SysfsFile
 
 	// Criteria: Input and edge-triggered
 	epollData.event.Events = syscall.EPOLLIN | EPOLLET
@@ -127,19 +152,19 @@ func (pin *ioPin) addInterruptPin() {
 	fmt.Println(epollData.fd, int(fd_gpio.Fd()), &epollData.event)
 
 	if err != nil {
-		fmt.Println("epollctl add error: ", err)
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 // Interrupt service routine by loose definition
-func isr(triggered chan int) {
+func (*IOPin) ISR(triggered chan int) {
 	var err error
 	epollData.fd, err = syscall.EpollCreate1(0)
 
 	if err != nil {
 		fmt.Println("epoll_create1 error: ", err)
-		os.Exit(1)
 	}
 
 	// TODO: correct file closing, defer, etc.
@@ -152,8 +177,6 @@ func isr(triggered chan int) {
 
 			if err != nil {
 				fmt.Println("epoll_wait error ", err)
-				break
-
 			}
 
 			triggered <- 1
@@ -163,41 +186,6 @@ func isr(triggered chan int) {
 			fmt.Println("events[0].Fd ", epollData.events[0].Fd)
 		}
 	}()
-}
-
-// Variadic function: one or two arguments.
-// The first argument is an error, e.g. returned from a file operation
-// The second argument is a boolean flag for whether the error should be treated as a warning
-func fileCheck(args ...interface{}) {
-
-	var err error
-	var warn_only bool
-	var tag string
-
-	for i, val := range args {
-		switch i {
-		case 0:
-			param, _ := val.(error)
-			err = param
-		case 1:
-			param, _ := val.(bool)
-			warn_only = param
-		case 2:
-			param, _ := val.(string)
-			tag = param
-		}
-	}
-
-	if err != nil {
-		if warn_only {
-			fmt.Println("Warning: problems were encountered opening the file as follows.")
-			fmt.Println(tag)
-			fmt.Println(err)
-		} else {
-			fmt.Println(tag)
-			panic(err)
-		}
-	}
 }
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
@@ -210,51 +198,27 @@ const (
 )
 
 func main() {
+	gpio2, _ := InitPin(2, "out")
+	defer gpio2.ReleasePin()
 
-	gpio2 := ioPin{
-		gpioNum:   2,
-		headerNum: 3,
-		direction: "out"}
-
-	gpio2.init()
-	defer gpio2.release()
-
-	gpio3 := ioPin{
-		gpioNum:     3,
-		headerNum:   5,
-		direction:   "in",
-		triggerEdge: "rising"}
-
-	gpio3.init()
-	defer gpio3.release()
+	gpio3, _ := InitPin(3, "in")
+	defer gpio3.ReleasePin()
 
 	triggered3 := make(chan int)
-	isr(triggered3)
+	gpio3.ISR(triggered3)
 
-	gpio3.addInterruptPin()
+	gpio3.AddInterruptPin()
 
 	for {
 		fmt.Println(<-triggered3)
 	}
 
 	for {
-		gpio2.set_high()
+		gpio2.SetHigh()
 		time.Sleep(time.Millisecond * 1000)
-		gpio2.set_low()
+		gpio2.SetLow()
 		time.Sleep(time.Millisecond * 1000)
-		fmt.Println(gpio3.read())
+		fmt.Println(gpio3.Read())
 	}
-
-	/*
-	   high := []byte("1")
-	   low := []byte("0")
-
-	   for {
-	      ioutil.WriteFile("/sys/class/gpio/gpio2/value", high, 0600)
-	      time.Sleep(time.Millisecond * 1)
-	      ioutil.WriteFile("/sys/class/gpio/gpio2/value", low, 0600)
-	      time.Sleep(time.Millisecond * 1)
-	   }
-	*/
 
 }
