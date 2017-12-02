@@ -32,6 +32,25 @@ import (
 	"time"
 )
 
+// These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
+// implemented in golang, and epoll() is implemented but might not be fully implemented. sysCall.EPOLLIN functions as
+// expected, but sysCall.EPOLLET does not. The following 1 << 31 shift came from the single epoll() go example
+// that I was able to find; someone else apparently ran into similar problems.
+const (
+	EPOLLET       = 1 << 31
+	MaxPollEvents = 32
+)
+
+// Epoll data struct. This struct should be created only once per process and should contain all of the information
+// needed for the Epoll call.
+var epollData struct {
+	// Epoll file descriptor
+	fd int
+	// Single Epoll event and an array corresponding to all the events that the OS will describe after returning
+	event  syscall.EpollEvent
+	events [MaxPollEvents]syscall.EpollEvent
+}
+
 // A single RPi GPIO pin
 type IOPin struct {
 	// The GPIO number (important)
@@ -49,10 +68,10 @@ type IOPin struct {
 // TODO: Create a function to set the trigger edge as rising or falling
 
 // Initialize a GPIO pin
-func InitPin(gpioNum int, direction string) (*IOPin, error){
-	pin := IOPin {
-		GPIONum: gpioNum,
-		Direction: direction,
+func InitPin(gpioNum int, direction string) (*IOPin, error) {
+	pin := IOPin{
+		GPIONum:     gpioNum,
+		Direction:   direction,
 		TriggerEdge: "rising",
 	}
 	// Check to see whether the pin has already been exported
@@ -154,17 +173,8 @@ func (pin *IOPin) Read() ([]byte, error) {
 	return readBuffer, nil
 }
 
-// Keeping all the epoll data global as epoll should be created only once per process
-var epollData struct {
-	// Epoll file descriptor
-	fd int
-	// Single Epoll event and an array corresponding to all the events that the OS will describe after returning
-	event  syscall.EpollEvent
-	events [MaxPollEvents]syscall.EpollEvent
-}
-
+// Set up a GPIO pin to be both an input and an interrupt pin
 func (pin *IOPin) AddInterruptPin() error {
-
 	fdGpio := pin.SysfsFile
 
 	// Criteria: Input and edge-triggered
@@ -210,15 +220,6 @@ func (*IOPin) ISR(triggered chan int) {
 		}
 	}()
 }
-
-// These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
-// implemented in golang, and epoll() is implemented but might not be fully implemented. sysCall.EPOLLIN functions as
-// expected, but sysCall.EPOLLET does not. The following 1 << 31 shift came from the single epoll() go example
-// that I was able to find; someone else apparently ran into similar problems.
-const (
-	EPOLLET       = 1 << 31
-	MaxPollEvents = 32
-)
 
 func main() {
 	gpio2, _ := InitPin(2, "out")
