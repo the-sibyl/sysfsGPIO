@@ -24,6 +24,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package sysfsGPIO
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -120,6 +121,26 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 	}
 
 	return &pin, nil
+}
+
+// Set a pin's interrupt trigger edge as rising or falling
+func (pin *IOPin) SetTriggerEdge(triggerEdge string) error {
+	// Check for a valid input before writing to SysFS file
+	if triggerEdge == "rising" || triggerEdge == "falling" {
+		pin.TriggerEdge = triggerEdge
+	} else {
+		return errors.New("Error: Invalid trigger edge specified")
+	}
+
+	// Write to SysFS file
+	edgeFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/edge"
+	sysfsPinEdge := []byte(pin.TriggerEdge)
+	err := ioutil.WriteFile(edgeFileName, sysfsPinEdge, os.ModeDevice|os.ModeCharDevice)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Release the GPIO pin and close sysfs files
