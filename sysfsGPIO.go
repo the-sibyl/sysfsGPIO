@@ -82,8 +82,8 @@ func InitPin(gpioNum int, direction string) (*IOPin, error){
 	// Set the interrupt edge if applicable: "rising" or "falling" or "none"
 	if pin.Direction == "in" && len(pin.TriggerEdge) != 0 {
 		edgeFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/edge"
-		sysfs_pin_edge := []byte(pin.TriggerEdge)
-		err = ioutil.WriteFile(edgeFileName, sysfs_pin_edge, os.ModeDevice|os.ModeCharDevice)
+		sysfsPinEdge := []byte(pin.TriggerEdge)
+		err = ioutil.WriteFile(edgeFileName, sysfsPinEdge, os.ModeDevice|os.ModeCharDevice)
 		if err != nil {
 			return nil, err
 		}
@@ -165,14 +165,14 @@ var epollData struct {
 
 func (pin *IOPin) AddInterruptPin() error {
 
-	fd_gpio := pin.SysfsFile
+	fdGpio := pin.SysfsFile
 
 	// Criteria: Input and edge-triggered
 	epollData.event.Events = syscall.EPOLLIN | EPOLLET
-	epollData.event.Fd = int32(fd_gpio.Fd())
-	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_ADD, int(fd_gpio.Fd()), &epollData.event)
+	epollData.event.Fd = int32(fdGpio.Fd())
+	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_ADD, int(fdGpio.Fd()), &epollData.event)
 
-	fmt.Println(epollData.fd, int(fd_gpio.Fd()), &epollData.event)
+	fmt.Println(epollData.fd, int(fdGpio.Fd()), &epollData.event)
 
 	if err != nil {
 		return err
