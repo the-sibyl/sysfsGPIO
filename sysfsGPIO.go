@@ -21,18 +21,18 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-package sysfsGPIO
-//package main
+//package sysfsGPIO
+package main
 
 import (
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"syscall"
 	"time"
-	"golang.org/x/sys/unix"
 )
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
@@ -48,7 +48,7 @@ import (
 // https://godoc.org/golang.org/x/sys/unix
 
 const (
-	EPOLLET       = unix.EPOLLET
+	EPOLLET = unix.EPOLLET
 	// EPOLLET = 1 << 31
 	MaxPollEvents = 32
 )
@@ -204,13 +204,33 @@ func (pin *IOPin) Read() ([]byte, error) {
 }
 
 // Set up a GPIO pin to be both an input and an interrupt pin
-func (pin *IOPin) AddInterruptPin() error {
+func (pin *IOPin) AddPinInterrupt() error {
 	fdGpio := pin.SysfsFile
 
 	// Criteria: Input and edge-triggered
 	epollData.event.Events = syscall.EPOLLIN | EPOLLET
 	epollData.event.Fd = int32(fdGpio.Fd())
 	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_ADD, int(fdGpio.Fd()), &epollData.event)
+
+	fmt.Println(epollData.fd, int(fdGpio.Fd()), &epollData.event)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// TODO: Finish and test this function
+
+// Remove the monitoring of a GPIO pin
+func (pin *IOPin) DeletePinInterrupt() error {
+	fdGpio := pin.SysfsFile
+
+	// Criteria: Input and edge-triggered
+	//	epollData.event.Events = syscall.EPOLLIN | EPOLLET
+	epollData.event.Fd = int32(fdGpio.Fd())
+	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_DEL, int(fdGpio.Fd()), &epollData.event)
 
 	fmt.Println(epollData.fd, int(fdGpio.Fd()), &epollData.event)
 
@@ -249,6 +269,12 @@ func (*IOPin) ISR(triggered chan int) {
 			fmt.Println("events[0].Fd ", epollData.events[0].Fd)
 		}
 	}()
+
+	// TODO: Have a buffered channel return a struct queue of GPIO number and corresponding edge event. e.g.
+	// 3, "rising"
+	// 4, "rising"
+	// 17, "falling"
+	// and so forth
 }
 
 func main() {
@@ -264,7 +290,7 @@ func main() {
 	triggered3 := make(chan int)
 	gpio3.ISR(triggered3)
 
-	gpio3.AddInterruptPin()
+	gpio3.AddPinInterrupt()
 
 	for {
 		fmt.Println(<-triggered3)
