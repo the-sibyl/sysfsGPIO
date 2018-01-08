@@ -32,6 +32,7 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+	"golang.org/x/sys/unix"
 )
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
@@ -47,7 +48,8 @@ import (
 // https://godoc.org/golang.org/x/sys/unix
 
 const (
-	EPOLLET       = 1 << 31
+	EPOLLET       = unix.EPOLLET
+	// EPOLLET = 1 << 31
 	MaxPollEvents = 32
 )
 
