@@ -22,6 +22,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
 package sysfsGPIO
+//package main
 
 import (
 	"errors"
@@ -34,9 +35,17 @@ import (
 )
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
-// implemented in golang, and epoll() is implemented but might not be fully implemented. sysCall.EPOLLIN functions as
-// expected, but sysCall.EPOLLET does not. The following 1 << 31 shift came from the single epoll() go example
-// that I was able to find; someone else apparently ran into similar problems.
+// implemented in golang, and epoll() is implemented but might not be fully implemented. syscall.EPOLLIN functions as
+// expected, but syscall.EPOLLET does not. The following 1 << 31 shift came from the single epoll() go example
+// that I was able to find; someone else apparently ran into similar problems. Upon further examination, the difference
+// is in the sign: syscall.EPOLLET is -2147483648 while the EPOLLET below is the absolute value of it, e.g. there
+// seems to be an issue with the signed math in the Go library.
+//
+// Someone else found this problem.
+// https://github.com/golang/go/issues/5328
+// The constant is apparently corrected elsewhere.
+// https://godoc.org/golang.org/x/sys/unix
+
 const (
 	EPOLLET       = 1 << 31
 	MaxPollEvents = 32
@@ -65,8 +74,6 @@ type IOPin struct {
 	// Sysfs file
 	SysfsFile *os.File
 }
-
-// TODO: Create a function to set the trigger edge as rising or falling
 
 // Initialize a GPIO pin
 func InitPin(gpioNum int, direction string) (*IOPin, error) {
@@ -243,6 +250,9 @@ func (*IOPin) ISR(triggered chan int) {
 }
 
 func main() {
+	fmt.Println(syscall.EPOLLET)
+	fmt.Println(EPOLLET)
+	fmt.Println("Continuing...")
 	gpio2, _ := InitPin(2, "out")
 	defer gpio2.ReleasePin()
 
