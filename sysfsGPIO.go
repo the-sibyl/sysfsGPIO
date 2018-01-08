@@ -108,7 +108,9 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 		return nil, err
 	}
 
-	// Set the interrupt edge if applicable: "rising" or "falling" or "none"
+	// Set the interrupt edge if applicable: "rising" or "falling" or "both" or "none"
+	// Note: there are no checks done here on the validity of the edge type. Whatever is in the struct by default
+	// is what will be set here. This is fairly safe as the struct is private.
 	if pin.Direction == "in" && len(pin.TriggerEdge) != 0 {
 		edgeFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/edge"
 		sysfsPinEdge := []byte(pin.TriggerEdge)
@@ -132,10 +134,10 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 	return &pin, nil
 }
 
-// Set a pin's interrupt trigger edge as rising or falling
+// Set a pin's interrupt trigger edge as rising, falling, both, or none
 func (pin *IOPin) SetTriggerEdge(triggerEdge string) error {
 	// Check for a valid input before writing to SysFS file
-	if triggerEdge == "rising" || triggerEdge == "falling" {
+	if triggerEdge == "rising" || triggerEdge == "falling" || triggerEdge == "both" || triggerEdge == "none" {
 		pin.TriggerEdge = triggerEdge
 	} else {
 		return errors.New("Error: Invalid trigger edge specified")
