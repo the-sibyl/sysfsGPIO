@@ -48,7 +48,10 @@ import (
 const (
 	EPOLLET = unix.EPOLLET
 	// EPOLLET = 1 << 31
+	// Maximum number of epoll events. This parameter is fed to the kernel.
 	MaxPollEvents = 32
+	// This is set to an arbitrarily high value and should be more than enough for an RPi Zero.
+	MaxIOPinCount = 128
 )
 
 // Epoll data struct. This struct should be created only once per process and should contain all of the information
@@ -74,6 +77,10 @@ type IOPin struct {
 	// Sysfs file
 	SysfsFile *os.File
 }
+
+// A map of file descriptors to *IOPin. This is needed to back-reference the file descriptor returned by the kernel to
+// an IOPin struct.
+var fileDescriptorMap map[int32]*IOPin
 
 // Initialize a GPIO pin
 func InitPin(gpioNum int, direction string) (*IOPin, error) {
@@ -128,6 +135,9 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Create a mapping from file descriptor to *IOPin
+	fileDescriptorMap[int32(pin.SysfsFile.Fd())] = &pin
 
 	return &pin, nil
 }
@@ -191,16 +201,17 @@ func (pin *IOPin) SetLow() error {
 	return nil
 }
 
-// Read an input GPIO pin and return a byte slice
-func (pin *IOPin) Read() ([]byte, error) {
-	readBuffer := make([]byte, 16)
+// Read an input GPIO pin and return 0 for low or 1 for higha
+func (pin *IOPin) Read() (int, error) {
+	readBuffer := make([]byte, 1)
 	// Must rewind for every read
 	pin.SysfsFile.Seek(0, 0)
 	_, err := pin.SysfsFile.Read(readBuffer)
 	if err != nil {
-		return nil, err
+		return -1, err
 	}
-	return readBuffer, nil
+	state := int(readBuffer[0] & 1)
+	return state, nil
 }
 
 // Set up a GPIO pin to be both an input and an interrupt pin
@@ -241,9 +252,23 @@ func (pin *IOPin) DeletePinInterrupt() error {
 	return nil
 }
 
+type InterruptData struct {
+	IOPin *IOPin
+	Edge string
+	StateString string
+	StateInt int
+}
+
 // Interrupt service routine by loose definition
-func (*IOPin) ISR(triggered chan int) {
+// TODO: make this have singleton behavior
+func ISR() (interruptStream chan InterruptData) {
 	// TODO: correct file closing, defer, etc.
+
+	// Cap the channel's max to the maximum number of poll events for now. This may be expanded later if whatever
+	// code downstream can't keep up with a sudden burst.
+
+	// TODO: examine overflow behavior
+	interruptStream = make(chan InterruptData, MaxPollEvents)
 
 	// Spin the EpollWait() call off into a separate goroutine. If something happens, feed it into the channel.
 	go func() {
@@ -255,11 +280,39 @@ func (*IOPin) ISR(triggered chan int) {
 				fmt.Println("epoll_wait error ", err)
 			}
 
-			triggered <- 1
-
 			fmt.Println("numEvents: ", numEvents)
-			fmt.Println("events[0]: ", epollData.events[0])
-			fmt.Println("events[0].Fd ", epollData.events[0].Fd)
+			for ev := 0; ev < numEvents; ev++ {
+
+				fmt.Println("events[ev]: ", epollData.events[ev])
+				fmt.Println("events[ev].Fd ", epollData.events[ev].Fd)
+
+				ioPin := fileDescriptorMap[int32(epollData.events[ev].Fd)]
+				// Note: There is a possibility that this value can be wrong if the pin has been 
+				// modified by another process. It is much faster to use the edge value already in
+				// this program's memory than to go back to SysFS and poll another file.
+				edge := ioPin.TriggerEdge
+
+				var stateString string
+				var stateInt int
+				if edge == "rising" {
+					stateString = "high"
+					stateInt = 1
+				} else if edge == "falling" {
+					stateString = "low"
+					stateInt = 0
+				} else if edge == "both" {
+					stateInt, _ = ioPin.Read()
+					if stateInt == 0 {
+						stateString = "low"
+					} else if stateInt == 1 {
+						stateString = "high"
+					}
+				} else if edge == "none" {
+				}
+
+
+				interruptStream <- InterruptData{ioPin, edge, stateString, stateInt}
+			}
 		}
 	}()
 
@@ -268,9 +321,14 @@ func (*IOPin) ISR(triggered chan int) {
 	// 4, "rising"
 	// 17, "falling"
 	// and so forth
+
+	return interruptStream
 }
 
 func init() {
+	// Create the map for referencing file descriptors to IOPins
+	fileDescriptorMap = make(map[int32]*IOPin, MaxIOPinCount)
+
 	// Initialize the epollData file descriptor here. It should be only initialized once per process.
 	var err error
 	epollData.fd, err = syscall.EpollCreate1(0)

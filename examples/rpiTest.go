@@ -36,17 +36,24 @@ func main() {
 	gpio3, _ := sysfsGPIO.InitPin(26, "in")
 	defer gpio3.ReleasePin()
 
-	triggered2 := make(chan int)
-	gpio2.ISR(triggered2)
 	gpio2.AddPinInterrupt()
 
-	triggered3 := make(chan int)
-	gpio3.ISR(triggered3)
 	gpio3.AddPinInterrupt()
+	interruptStream := sysfsGPIO.ISR()
+	go func() {
+		for {
+			fmt.Println(<-interruptStream)
+		}
+	} ()
+
+	fmt.Println("Hi.................")
 
 	for {
-		fmt.Println("gpio2:", <-triggered2)
-		fmt.Println("gpio3:", <-triggered3)
+		time.Sleep(time.Millisecond * 300)
+		blarf, _ := gpio3.Read()
+		fmt.Println("3 read():", blarf)
+		yarf, _ := gpio2.Read()
+		fmt.Println("2 read():", yarf)
 	}
 
 	for {
