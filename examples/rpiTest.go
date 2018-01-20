@@ -34,6 +34,7 @@ func main() {
 	defer gpio2.ReleasePin()
 
 	gpio3, _ := sysfsGPIO.InitPin(26, "in")
+	gpio3.SetTriggerEdge("both")
 	defer gpio3.ReleasePin()
 
 	gpio2.AddPinInterrupt()
@@ -48,6 +49,7 @@ func main() {
 
 	fmt.Println("Hi.................")
 
+/*
 	for {
 		time.Sleep(time.Millisecond * 300)
 		blarf, _ := gpio3.Read()
@@ -55,6 +57,7 @@ func main() {
 		yarf, _ := gpio2.Read()
 		fmt.Println("2 read():", yarf)
 	}
+*/
 
 	for {
 //		gpio2.SetHigh()

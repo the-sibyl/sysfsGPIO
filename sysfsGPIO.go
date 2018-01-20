@@ -201,7 +201,7 @@ func (pin *IOPin) SetLow() error {
 	return nil
 }
 
-// Read an input GPIO pin and return 0 for low or 1 for higha
+// Read an input GPIO pin and return 0 for low or 1 for high
 func (pin *IOPin) Read() (int, error) {
 	readBuffer := make([]byte, 1)
 	// Must rewind for every read
@@ -222,8 +222,6 @@ func (pin *IOPin) AddPinInterrupt() error {
 	epollData.event.Events = syscall.EPOLLIN | EPOLLET
 	epollData.event.Fd = int32(fdGpio.Fd())
 	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_ADD, int(fdGpio.Fd()), &epollData.event)
-
-	fmt.Println(epollData.fd, int(fdGpio.Fd()), &epollData.event)
 
 	if err != nil {
 		return err
@@ -282,18 +280,14 @@ func ISR() (interruptStream chan InterruptData) {
 
 			fmt.Println("numEvents: ", numEvents)
 			for ev := 0; ev < numEvents; ev++ {
-
-				fmt.Println("events[ev]: ", epollData.events[ev])
-				fmt.Println("events[ev].Fd ", epollData.events[ev].Fd)
-
 				ioPin := fileDescriptorMap[int32(epollData.events[ev].Fd)]
 				// Note: There is a possibility that this value can be wrong if the pin has been 
 				// modified by another process. It is much faster to use the edge value already in
 				// this program's memory than to go back to SysFS and poll another file.
 				edge := ioPin.TriggerEdge
-
 				var stateString string
 				var stateInt int
+
 				if edge == "rising" {
 					stateString = "high"
 					stateInt = 1
@@ -315,12 +309,6 @@ func ISR() (interruptStream chan InterruptData) {
 			}
 		}
 	}()
-
-	// TODO: Have a buffered channel return a struct queue of GPIO number and corresponding edge event. e.g.
-	// 3, "rising"
-	// 4, "rising"
-	// 17, "falling"
-	// and so forth
 
 	return interruptStream
 }
