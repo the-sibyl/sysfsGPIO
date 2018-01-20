@@ -243,13 +243,6 @@ func (pin *IOPin) DeletePinInterrupt() error {
 
 // Interrupt service routine by loose definition
 func (*IOPin) ISR(triggered chan int) {
-	var err error
-	epollData.fd, err = syscall.EpollCreate1(0)
-
-	if err != nil {
-		fmt.Println("epoll_create1 error: ", err)
-	}
-
 	// TODO: correct file closing, defer, etc.
 
 	// Spin the EpollWait() call off into a separate goroutine. If something happens, feed it into the channel.
@@ -277,4 +270,12 @@ func (*IOPin) ISR(triggered chan int) {
 	// and so forth
 }
 
+func init() {
+	// Initialize the epollData file descriptor here. It should be only initialized once per process.
+	var err error
+	epollData.fd, err = syscall.EpollCreate1(0)
 
+	if err != nil {
+		fmt.Println("epoll_create1 error: ", err)
+	}
+}
