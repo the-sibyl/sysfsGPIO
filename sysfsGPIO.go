@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2017 Forrest Sibley <My^Name^Without^The^Surname@ieee.org>
+Copyright (c) 2018 Forrest Sibley <My^Name^Without^The^Surname@ieee.org>
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -21,8 +21,7 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
-//package sysfsGPIO
-package main
+package sysfsGPIO
 
 import (
 	"errors"
@@ -32,7 +31,6 @@ import (
 	"os"
 	"strconv"
 	"syscall"
-	"time"
 )
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
@@ -279,31 +277,4 @@ func (*IOPin) ISR(triggered chan int) {
 	// and so forth
 }
 
-func main() {
-	fmt.Println(syscall.EPOLLET)
-	fmt.Println(EPOLLET)
-	fmt.Println("Continuing...")
-	gpio2, _ := InitPin(2, "out")
-	defer gpio2.ReleasePin()
 
-	gpio3, _ := InitPin(3, "in")
-	defer gpio3.ReleasePin()
-
-	triggered3 := make(chan int)
-	gpio3.ISR(triggered3)
-
-	gpio3.AddPinInterrupt()
-
-	for {
-		fmt.Println(<-triggered3)
-	}
-
-	for {
-		gpio2.SetHigh()
-		time.Sleep(time.Millisecond * 1000)
-		gpio2.SetLow()
-		time.Sleep(time.Millisecond * 1000)
-		fmt.Println(gpio3.Read())
-	}
-
-}
