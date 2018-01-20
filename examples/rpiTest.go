@@ -25,8 +25,8 @@ package main
 
 import (
 	"fmt"
-	"time"
 	"github.com/the-sibyl/sysfsGPIO"
+	"time"
 )
 
 func main() {
@@ -45,26 +45,26 @@ func main() {
 		for {
 			fmt.Println(<-interruptStream)
 		}
-	} ()
+	}()
 
 	fmt.Println("Hi.................")
 
-/*
-	for {
-		time.Sleep(time.Millisecond * 300)
-		blarf, _ := gpio3.Read()
-		fmt.Println("3 read():", blarf)
-		yarf, _ := gpio2.Read()
-		fmt.Println("2 read():", yarf)
-	}
-*/
+	/*
+		for {
+			time.Sleep(time.Millisecond * 300)
+			blarf, _ := gpio3.Read()
+			fmt.Println("3 read():", blarf)
+			yarf, _ := gpio2.Read()
+			fmt.Println("2 read():", yarf)
+		}
+	*/
 
 	for {
-//		gpio2.SetHigh()
+		//		gpio2.SetHigh()
 		time.Sleep(time.Millisecond * 1000)
-//		gpio2.SetLow()
+		//		gpio2.SetLow()
 		time.Sleep(time.Millisecond * 1000)
-//		fmt.Println(gpio3.Read())
+		//		fmt.Println(gpio3.Read())
 	}
 
 }

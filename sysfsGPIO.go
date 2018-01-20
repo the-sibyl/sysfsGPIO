@@ -251,10 +251,10 @@ func (pin *IOPin) DeletePinInterrupt() error {
 }
 
 type InterruptData struct {
-	IOPin *IOPin
-	Edge string
+	IOPin       *IOPin
+	Edge        string
 	StateString string
-	StateInt int
+	StateInt    int
 }
 
 // Interrupt service routine by loose definition
@@ -281,7 +281,7 @@ func ISR() (interruptStream chan InterruptData) {
 			fmt.Println("numEvents: ", numEvents)
 			for ev := 0; ev < numEvents; ev++ {
 				ioPin := fileDescriptorMap[int32(epollData.events[ev].Fd)]
-				// Note: There is a possibility that this value can be wrong if the pin has been 
+				// Note: There is a possibility that this value can be wrong if the pin has been
 				// modified by another process. It is much faster to use the edge value already in
 				// this program's memory than to go back to SysFS and poll another file.
 				edge := ioPin.TriggerEdge
@@ -303,7 +303,6 @@ func ISR() (interruptStream chan InterruptData) {
 					}
 				} else if edge == "none" {
 				}
-
 
 				interruptStream <- InterruptData{ioPin, edge, stateString, stateInt}
 			}
