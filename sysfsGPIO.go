@@ -29,6 +29,7 @@ import (
 	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"strconv"
 	"syscall"
 )
@@ -76,6 +77,8 @@ type IOPin struct {
 	TriggerEdge string
 	// Sysfs file
 	SysfsFile *os.File
+	// Enabled flag for internal use. This inhibits read or write operations to pins.
+	Enabled bool
 }
 
 // A map of file descriptors to *IOPin. This is needed to back-reference the file descriptor returned by the kernel to
@@ -88,6 +91,7 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 		GPIONum:     gpioNum,
 		Direction:   direction,
 		TriggerEdge: "rising",
+		Enabled: true,
 	}
 	// Check to see whether the pin has already been exported
 	exportedCheckPath := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum)
@@ -164,8 +168,19 @@ func (pin *IOPin) SetTriggerEdge(triggerEdge string) error {
 
 // Release the GPIO pin and close sysfs files
 func (pin *IOPin) ReleasePin() error {
+	// Set the pin to be an input. This operation is likely overkill on some systems and is put here as added 
+	// protection that the pin will not be in output state when it is un-exported in SysFS.
+	pin.Direction = "in"
+	pin.Enabled = false
+	directionFileName := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum) + "/direction"
+	sysfsPinDirection := []byte(pin.Direction)
+	err := ioutil.WriteFile(directionFileName, sysfsPinDirection, os.ModeDevice|os.ModeCharDevice)
+	if err != nil {
+		return err
+	}
+
 	// Close the device file
-	err := pin.SysfsFile.Close()
+	err = pin.SysfsFile.Close()
 	if err != nil {
 		return err
 	}
@@ -180,38 +195,47 @@ func (pin *IOPin) ReleasePin() error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
 // Set an output GPIO pin high
 func (pin *IOPin) SetHigh() error {
-	_, err := pin.SysfsFile.Write([]byte("1"))
-	if err != nil {
-		return err
+	if pin.Enabled {
+		_, err := pin.SysfsFile.Write([]byte("1"))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // Set an output GPIO pin low
 func (pin *IOPin) SetLow() error {
-	_, err := pin.SysfsFile.Write([]byte("0"))
-	if err != nil {
-		return err
+	if pin.Enabled {
+		_, err := pin.SysfsFile.Write([]byte("0"))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // Read an input GPIO pin and return 0 for low or 1 for high
 func (pin *IOPin) Read() (int, error) {
-	readBuffer := make([]byte, 1)
-	// Must rewind for every read
-	pin.SysfsFile.Seek(0, 0)
-	_, err := pin.SysfsFile.Read(readBuffer)
-	if err != nil {
-		return -1, err
+	if pin.Enabled {
+		readBuffer := make([]byte, 1)
+		// Must rewind for every read
+		pin.SysfsFile.Seek(0, 0)
+		_, err := pin.SysfsFile.Read(readBuffer)
+		if err != nil {
+			return -1, err
+		}
+		state := int(readBuffer[0] & 1)
+		return state, nil
+	} else {
+		return -1, nil
 	}
-	state := int(readBuffer[0] & 1)
-	return state, nil
 }
 
 // Set up a GPIO pin to be both an input and an interrupt pin
@@ -323,4 +347,27 @@ func init() {
 	if err != nil {
 		fmt.Println("epoll_create1 error: ", err)
 	}
+
+	// Handle SIGINT events
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for sig := range c {
+			fmt.Println("Interrupt signal received:", sig)
+
+			for _, pin := range fileDescriptorMap {
+//				fmt.Println(pin)
+				pin.Enabled = false
+				err := pin.ReleasePin()
+
+				if err != nil {
+					fmt.Println("Error releasing pin upon program exit:", err)
+				}
+			}
+
+			fmt.Println("Pins have been released in SysFS.")
+
+			os.Exit(1)
+		}
+	}()
 }
