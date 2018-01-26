@@ -91,7 +91,7 @@ func InitPin(gpioNum int, direction string) (*IOPin, error) {
 		GPIONum:     gpioNum,
 		Direction:   direction,
 		TriggerEdge: "rising",
-		Enabled: true,
+		Enabled:     true,
 	}
 	// Check to see whether the pin has already been exported
 	exportedCheckPath := "/sys/class/gpio/gpio" + strconv.Itoa(pin.GPIONum)
@@ -168,7 +168,7 @@ func (pin *IOPin) SetTriggerEdge(triggerEdge string) error {
 
 // Release the GPIO pin and close sysfs files
 func (pin *IOPin) ReleasePin() error {
-	// Set the pin to be an input. This operation is likely overkill on some systems and is put here as added 
+	// Set the pin to be an input. This operation is likely overkill on some systems and is put here as added
 	// protection that the pin will not be in output state when it is un-exported in SysFS.
 	pin.Direction = "in"
 	pin.Enabled = false
@@ -356,7 +356,7 @@ func init() {
 			fmt.Println("Interrupt signal received:", sig)
 
 			for _, pin := range fileDescriptorMap {
-//				fmt.Println(pin)
+				//				fmt.Println(pin)
 				pin.Enabled = false
 				err := pin.ReleasePin()
 
