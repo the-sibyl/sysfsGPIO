@@ -261,12 +261,12 @@ func (pin *IOPin) AddPinInterrupt() error {
 func (pin *IOPin) DeletePinInterrupt() error {
 	fdGpio := pin.SysfsFile
 
-	// Criteria: Input and edge-triggered
-	//	epollData.event.Events = syscall.EPOLLIN | EPOLLET
+	fmt.Println("Before:", epollData.fd, int(fdGpio.Fd()), &epollData.event)
+
 	epollData.event.Fd = int32(fdGpio.Fd())
 	err := syscall.EpollCtl(epollData.fd, syscall.EPOLL_CTL_DEL, int(fdGpio.Fd()), &epollData.event)
 
-	fmt.Println(epollData.fd, int(fdGpio.Fd()), &epollData.event)
+	fmt.Println("After:", epollData.fd, int(fdGpio.Fd()), &epollData.event)
 
 	if err != nil {
 		return err
@@ -291,8 +291,8 @@ func GetInterruptStream() <-chan InterruptData {
 
 // Interrupt service routine by loose definition
 func isr() (interruptStream chan InterruptData) {
-	// TODO: correct file closing, defer, etc.
 
+	// Bidirectional channel returned by this function. This will be converted to a read-only channel in init().
 	interruptStream = make(chan InterruptData, MaxPollEvents)
 
 	// Spin the EpollWait() call off into a separate goroutine. If something happens, feed it into the channel.
