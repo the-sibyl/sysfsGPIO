@@ -25,8 +25,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/the-sibyl/sysfsGPIO"
 	"time"
+
+	"github.com/the-sibyl/sysfsGPIO"
 )
 
 func main() {
@@ -40,10 +41,13 @@ func main() {
 	gpio2.AddPinInterrupt()
 
 	gpio3.AddPinInterrupt()
-	interruptStream := sysfsGPIO.ISR()
+
 	go func() {
 		for {
-			fmt.Println(<-interruptStream)
+			select {
+				case s := <-sysfsGPIO.GetInterruptStream():
+					fmt.Println(s)
+			}
 		}
 	}()
 

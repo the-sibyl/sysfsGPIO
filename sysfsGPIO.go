@@ -26,12 +26,13 @@ package sysfsGPIO
 import (
 	"errors"
 	"fmt"
-	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // These are defines for the Epoll system. At the time that this code was written, poll() and select() were not
@@ -281,15 +282,17 @@ type InterruptData struct {
 	StateInt    int
 }
 
+// Global variable used in init()
+var intStream <-chan InterruptData
+
+func GetInterruptStream() <-chan InterruptData {
+	return intStream
+}
+
 // Interrupt service routine by loose definition
-// TODO: make this have singleton behavior
-func ISR() (interruptStream chan InterruptData) {
+func isr() (interruptStream chan InterruptData) {
 	// TODO: correct file closing, defer, etc.
 
-	// Cap the channel's max to the maximum number of poll events for now. This may be expanded later if whatever
-	// code downstream can't keep up with a sudden burst.
-
-	// TODO: examine overflow behavior
 	interruptStream = make(chan InterruptData, MaxPollEvents)
 
 	// Spin the EpollWait() call off into a separate goroutine. If something happens, feed it into the channel.
@@ -328,7 +331,10 @@ func ISR() (interruptStream chan InterruptData) {
 				} else if edge == "none" {
 				}
 
-				interruptStream <- InterruptData{ioPin, edge, stateString, stateInt}
+				// Do not allow the channel to overflow
+				if len(interruptStream) != cap(interruptStream) {
+					interruptStream <- InterruptData{ioPin, edge, stateString, stateInt}
+				}
 			}
 		}
 	}()
@@ -347,6 +353,8 @@ func init() {
 	if err != nil {
 		fmt.Println("epoll_create1 error: ", err)
 	}
+
+	intStream = isr()
 
 	// Handle SIGINT events
 	c := make(chan os.Signal, 1)
