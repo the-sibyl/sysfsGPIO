@@ -279,6 +279,7 @@ type InterruptData struct {
 	IOPin       *IOPin
 	Edge        string
 	StateString string
+	// StateInt is unimplemented. I may consider taking this out.
 	StateInt    int
 }
 
